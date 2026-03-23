@@ -4,12 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import PriceForm from './PriceForm';
+import PriceForm, { SnappedStore, PriceSubmitData } from './PriceForm';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface PriceEntry {
-  id: number;
+  id: number;               // store_id (or negative price.id for legacy rows)
+  osm_id: number | null;
   lat: number;
   lng: number;
   zip: string | null;
@@ -20,11 +21,22 @@ interface PriceEntry {
   strength: number | null;
   flavor: string | null;
   created_at: string;
+  report_count: number;
+  confidence: number;
+  is_stale: boolean;
+}
+
+interface StoreEntry {
+  osm_id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  brand: string | null;
+  category: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Thresholds are per-can; multiply by 5 for log mode
 const GREEN_THRESH = 4.75;
 const RED_THRESH   = 5.75;
 
@@ -35,15 +47,23 @@ function priceClass(displayPrice: number, logMode: boolean) {
   return 'pin-red';
 }
 
-function makePriceIcon(displayPrice: number, logMode: boolean) {
+function makePriceIcon(displayPrice: number, logMode: boolean, isStale: boolean) {
   return L.divIcon({
     className: '',
-    html: `<div class="price-pin ${priceClass(displayPrice, logMode)}"><span>$${displayPrice.toFixed(2)}</span></div>`,
+    html: `<div class="price-pin ${priceClass(displayPrice, logMode)}${isStale ? ' pin-stale' : ''}"><span>$${displayPrice.toFixed(2)}</span></div>`,
     iconSize: [52, 52],
     iconAnchor: [4, 52],
     popupAnchor: [22, -56],
   });
 }
+
+const storeIcon = L.divIcon({
+  className: '',
+  html: `<div class="store-marker"><span>+</span></div>`,
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -30],
+});
 
 const dropPinIcon = L.divIcon({
   className: '',
@@ -61,14 +81,21 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function confidenceBadge(confidence: number, isStale: boolean) {
+  if (isStale) return <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">Stale</span>;
+  if (confidence >= 0.7) return null;
+  if (confidence >= 0.4) return <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Aging</span>;
+  return <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Old</span>;
+}
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function BoundsWatcher({ onChange }: { onChange: (b: L.LatLngBounds) => void }) {
+function BoundsWatcher({ onChange }: { onChange: (b: L.LatLngBounds, zoom: number) => void }) {
   const map = useMapEvents({
-    moveend() { onChange(map.getBounds()); },
-    zoomend() { onChange(map.getBounds()); },
+    moveend() { onChange(map.getBounds(), map.getZoom()); },
+    zoomend() { onChange(map.getBounds(), map.getZoom()); },
   });
-  useEffect(() => { onChange(map.getBounds()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onChange(map.getBounds(), map.getZoom()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
@@ -90,18 +117,22 @@ function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function MapPage() {
-  const [prices, setPrices] = useState<PriceEntry[]>([]);
-  const [logMode, setLogMode] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [formLatLng, setFormLatLng] = useState<[number, number] | null>(null);
-  const [flyTarget, setFlyTarget] = useState<[number, number, number] | null>(null);
-  const [zipInput, setZipInput] = useState('');
-  const [locating, setLocating] = useState(false);
-  const [locError, setLocError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const mapRef = useRef<L.Map | null>(null);
-  const boundsRef = useRef<L.LatLngBounds | null>(null);
-  const fetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [prices, setPrices]           = useState<PriceEntry[]>([]);
+  const [stores, setStores]           = useState<StoreEntry[]>([]);
+  const [zoom, setZoom]               = useState(5);
+  const [logMode, setLogMode]         = useState(false);
+  const [showForm, setShowForm]       = useState(false);
+  const [formLatLng, setFormLatLng]   = useState<[number, number] | null>(null);
+  const [formStore, setFormStore]     = useState<SnappedStore | null>(null);
+  const [flyTarget, setFlyTarget]     = useState<[number, number, number] | null>(null);
+  const [zipInput, setZipInput]       = useState('');
+  const [locating, setLocating]       = useState(false);
+  const [locError, setLocError]       = useState('');
+  const [successMsg, setSuccessMsg]   = useState('');
+  const mapRef       = useRef<L.Map | null>(null);
+  const boundsRef    = useRef<L.LatLngBounds | null>(null);
+  const fetchTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const storeTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPrices = useCallback((bounds: L.LatLngBounds) => {
     if (fetchTimer.current) clearTimeout(fetchTimer.current);
@@ -115,10 +146,25 @@ export default function MapPage() {
     }, 300);
   }, []);
 
-  const handleBoundsChange = useCallback((bounds: L.LatLngBounds) => {
+  const fetchStores = useCallback((bounds: L.LatLngBounds) => {
+    if (storeTimer.current) clearTimeout(storeTimer.current);
+    storeTimer.current = setTimeout(async () => {
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      const res = await fetch(
+        `/api/stores?swLat=${sw.lat}&swLng=${sw.lng}&neLat=${ne.lat}&neLng=${ne.lng}`
+      );
+      if (res.ok) setStores(await res.json());
+    }, 500);
+  }, []);
+
+  const handleBoundsChange = useCallback((bounds: L.LatLngBounds, newZoom: number) => {
     boundsRef.current = bounds;
+    setZoom(newZoom);
     fetchPrices(bounds);
-  }, [fetchPrices]);
+    if (newZoom >= 13) fetchStores(bounds);
+    else setStores([]);
+  }, [fetchPrices, fetchStores]);
 
   // Try geolocation on first load
   useEffect(() => {
@@ -159,21 +205,49 @@ export default function MapPage() {
     );
   }
 
-  function openForm() {
+  function openFreeformForm() {
     const map = mapRef.current;
     const center = map ? map.getCenter() : { lat: 39.5, lng: -98.35 };
     setFormLatLng([center.lat, center.lng]);
+    setFormStore(null);
     setShowForm(true);
   }
 
-  async function handleSubmit(data: {
-    store_name: string;
-    price: number;
-    strength: number | null;
-    flavor: string;
-    lat: number;
-    lng: number;
-  }) {
+  function openStoreForm(store: StoreEntry) {
+    setFormLatLng([store.lat, store.lng]);
+    setFormStore({
+      osm_id: store.osm_id,
+      name: store.name,
+      lat: store.lat,
+      lng: store.lng,
+      category: store.category,
+    });
+    setShowForm(true);
+    mapRef.current?.closePopup();
+  }
+
+  function openReportFromPin(pin: PriceEntry) {
+    setFormLatLng([pin.lat, pin.lng]);
+    setFormStore({
+      id: pin.id > 0 ? pin.id : undefined,
+      name: pin.store_name ?? 'Unknown Store',
+      lat: pin.lat,
+      lng: pin.lng,
+    });
+    setShowForm(true);
+    mapRef.current?.closePopup();
+  }
+
+  async function handleConfirm(storeId: number) {
+    await fetch('/api/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_id: storeId }),
+    });
+    if (boundsRef.current) fetchPrices(boundsRef.current);
+  }
+
+  async function handleSubmit(data: PriceSubmitData) {
     const res = await fetch('/api/prices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -182,10 +256,13 @@ export default function MapPage() {
 
     if (res.ok) {
       setShowForm(false);
+      setFormStore(null);
       setSuccessMsg('Price reported! Thanks for contributing.');
       setTimeout(() => setSuccessMsg(''), 4000);
-      // Refresh pins in current view
-      if (boundsRef.current) fetchPrices(boundsRef.current);
+      if (boundsRef.current) {
+        fetchPrices(boundsRef.current);
+        if (zoom >= 13) fetchStores(boundsRef.current);
+      }
     } else {
       const j = await res.json().catch(() => ({}));
       throw new Error(j.error ?? 'Submit failed');
@@ -193,6 +270,11 @@ export default function MapPage() {
   }
 
   const scale = logMode ? 5 : 1;
+
+  // OSM IDs of stores that already have price data (to avoid duplicate markers)
+  const pricedOsmIds = new Set(prices.map(p => p.osm_id).filter(Boolean));
+  // Filter out Overpass stores that already have a price pin on the map
+  const unpricedStores = stores.filter(s => !pricedOsmIds.has(s.osm_id));
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -236,7 +318,7 @@ export default function MapPage() {
 
         <div className="ml-auto">
           <button
-            onClick={openForm}
+            onClick={openFreeformForm}
             className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
             + Report Price
@@ -246,7 +328,6 @@ export default function MapPage() {
 
       {/* ── Legend + log toggle ── */}
       <div className="absolute top-20 right-4 z-40 bg-white rounded-xl shadow-md px-3 py-2.5 flex flex-col gap-1.5 text-xs font-medium border border-gray-100 min-w-[140px]">
-        {/* Can / Log toggle */}
         <div className="flex rounded-lg overflow-hidden border border-gray-200 mb-1">
           <button
             onClick={() => setLogMode(false)}
@@ -277,6 +358,12 @@ export default function MapPage() {
           <span className="w-3 h-3 rounded-full bg-red-600 inline-block shrink-0"></span>
           Over ${(RED_THRESH * scale).toFixed(2)}
         </div>
+        {zoom >= 13 && (
+          <div className="flex items-center gap-2 pt-1 mt-0.5 border-t border-gray-100">
+            <span className="w-3 h-3 rounded-full bg-gray-400 inline-block shrink-0"></span>
+            No data yet
+          </div>
+        )}
       </div>
 
       {/* ── Success toast ── */}
@@ -302,10 +389,14 @@ export default function MapPage() {
 
           <BoundsWatcher onChange={handleBoundsChange} />
           <FlyTo target={flyTarget} />
-          <MapClickHandler onMapClick={(lat, lng) => { setFormLatLng([lat, lng]); setShowForm(true); }} />
+          <MapClickHandler onMapClick={(lat, lng) => {
+            setFormLatLng([lat, lng]);
+            setFormStore(null);
+            setShowForm(true);
+          }} />
 
-          {/* Draggable pin shown while form is open */}
-          {showForm && formLatLng && (
+          {/* Draggable pin shown while freeform form is open */}
+          {showForm && formLatLng && !formStore && (
             <Marker
               position={formLatLng}
               draggable
@@ -319,18 +410,41 @@ export default function MapPage() {
             />
           )}
 
+          {/* Gray store markers — stores with no price data yet (zoom ≥ 13 only) */}
+          {unpricedStores.map(s => (
+            <Marker
+              key={`store-${s.osm_id}`}
+              position={[s.lat, s.lng]}
+              icon={storeIcon}
+              eventHandlers={{
+                click() { openStoreForm(s); },
+              }}
+            />
+          ))}
+
+          {/* Colored price pins — one per store */}
           {prices.map(p => {
             const displayPrice = logMode ? p.price * 5 : p.price;
             return (
-              <Marker key={`${p.id}-${logMode}`} position={[p.lat, p.lng]} icon={makePriceIcon(displayPrice, logMode)}>
+              <Marker
+                key={`${p.id}-${logMode}`}
+                position={[p.lat, p.lng]}
+                icon={makePriceIcon(displayPrice, logMode, p.is_stale)}
+              >
                 <Popup>
-                  <div className="p-3 min-w-[190px]">
-                    <div className="text-2xl font-black text-gray-900">${displayPrice.toFixed(2)}</div>
-                    <div className="text-xs text-gray-400 -mt-0.5">
-                      {logMode
-                        ? `per log (5 cans) · $${p.price.toFixed(2)} per can`
-                        : `per can · $${(p.price * 5).toFixed(2)} per log`}
+                  <div className="p-3 min-w-[200px]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-2xl font-black text-gray-900">${displayPrice.toFixed(2)}</div>
+                        <div className="text-xs text-gray-400 -mt-0.5">
+                          {logMode
+                            ? `per log (5 cans) · $${p.price.toFixed(2)} per can`
+                            : `per can · $${(p.price * 5).toFixed(2)} per log`}
+                        </div>
+                      </div>
+                      {confidenceBadge(p.confidence, p.is_stale)}
                     </div>
+
                     {(p.strength || p.flavor) && (
                       <div className="text-sm text-gray-500 mt-1.5">
                         {[p.strength ? `${p.strength}mg` : null, p.flavor].filter(Boolean).join(' · ')}
@@ -345,7 +459,29 @@ export default function MapPage() {
                         {p.zip ? ` ${p.zip}` : ''}
                       </div>
                     )}
-                    <div className="text-xs text-gray-400 mt-2">{timeAgo(p.created_at)}</div>
+
+                    <div className="text-xs text-gray-400 mt-1.5">
+                      {p.report_count > 1
+                        ? `${p.report_count} reports · last updated ${timeAgo(p.created_at)}`
+                        : `Reported ${timeAgo(p.created_at)}`}
+                    </div>
+
+                    <div className="flex gap-2 mt-3">
+                      {p.id > 0 && (
+                        <button
+                          onClick={() => handleConfirm(p.id)}
+                          className="flex-1 py-1.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100"
+                        >
+                          Still accurate
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openReportFromPin(p)}
+                        className="flex-1 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100"
+                      >
+                        Update price
+                      </button>
+                    </div>
                   </div>
                 </Popup>
               </Marker>
@@ -359,8 +495,9 @@ export default function MapPage() {
         <PriceForm
           lat={formLatLng[0]}
           lng={formLatLng[1]}
+          snappedStore={formStore}
           onSubmit={handleSubmit}
-          onClose={() => setShowForm(false)}
+          onClose={() => { setShowForm(false); setFormStore(null); }}
         />
       )}
     </div>

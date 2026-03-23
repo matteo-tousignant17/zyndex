@@ -7,21 +7,37 @@ const FLAVORS = [
   'Citrus', 'Smooth', 'Coffee', 'Cinnamon', 'Other',
 ];
 
+export interface SnappedStore {
+  id?: number;       // DB store_id — set when tapping a price pin
+  osm_id?: number;   // Overpass OSM ID — set when tapping a gray store marker
+  name: string;
+  lat: number;
+  lng: number;
+  category?: string | null;
+}
+
+export interface PriceSubmitData {
+  store_name: string;
+  price: number;
+  strength: number | null;
+  flavor: string;
+  lat: number;
+  lng: number;
+  store_id?: number;
+  osm_id?: number;
+  osm_name?: string;
+  osm_category?: string;
+}
+
 interface Props {
   lat: number;
   lng: number;
-  onSubmit: (data: {
-    store_name: string;
-    price: number;
-    strength: number | null;
-    flavor: string;
-    lat: number;
-    lng: number;
-  }) => Promise<void>;
+  snappedStore?: SnappedStore | null;
+  onSubmit: (data: PriceSubmitData) => Promise<void>;
   onClose: () => void;
 }
 
-export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
+export default function PriceForm({ lat, lng, snappedStore, onSubmit, onClose }: Props) {
   const [storeName, setStoreName] = useState('');
   const [priceStr, setPriceStr] = useState('');
   const [flavor, setFlavor] = useState('Cool Mint');
@@ -41,9 +57,26 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
 
     const strength = strengthStr ? parseInt(strengthStr) : null;
 
+    const data: PriceSubmitData = {
+      store_name: snappedStore ? snappedStore.name : storeName.trim(),
+      price,
+      strength,
+      flavor,
+      lat: snappedStore ? snappedStore.lat : lat,
+      lng: snappedStore ? snappedStore.lng : lng,
+    };
+
+    if (snappedStore?.id) {
+      data.store_id = snappedStore.id;
+    } else if (snappedStore?.osm_id) {
+      data.osm_id = snappedStore.osm_id;
+      data.osm_name = snappedStore.name;
+      data.osm_category = snappedStore.category ?? undefined;
+    }
+
     setSubmitting(true);
     try {
-      await onSubmit({ store_name: storeName.trim(), price, strength, flavor, lat, lng });
+      await onSubmit(data);
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -80,6 +113,7 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
                 onChange={e => setPriceStr(e.target.value)}
                 placeholder="5.49"
                 required
+                autoFocus
                 className="w-full pl-7 pr-3 py-3 text-xl font-bold border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -113,24 +147,30 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
             </div>
           </div>
 
-          {/* Store name */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Store name <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={storeName}
-              onChange={e => setStoreName(e.target.value)}
-              placeholder="e.g. 7-Eleven, Wawa, CVS…"
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Location hint */}
-          <div className="text-xs text-gray-400 -mt-1">
-            📍 {lat.toFixed(4)}, {lng.toFixed(4)} — drag the pin on the map to adjust location.
-          </div>
+          {/* Store name — editable for freeform, read-only when snapped */}
+          {snappedStore ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl">
+              <span className="text-blue-600 text-sm">📍</span>
+              <span className="text-sm font-medium text-blue-800">{snappedStore.name}</span>
+              <span className="text-xs text-blue-500 ml-auto">snapped</span>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Store name <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={storeName}
+                onChange={e => setStoreName(e.target.value)}
+                placeholder="e.g. 7-Eleven, Wawa, CVS…"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="text-xs text-gray-400 mt-1">
+                📍 {lat.toFixed(4)}, {lng.toFixed(4)} — drag the pin on the map to adjust.
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>

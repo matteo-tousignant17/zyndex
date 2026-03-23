@@ -59,6 +59,35 @@ html, body, #__next {
 .price-pin.pin-green  { background: #16a34a; }
 .price-pin.pin-yellow { background: #d97706; }
 .price-pin.pin-red    { background: #dc2626; }
+.price-pin.pin-stale  { opacity: 0.45; }
+
+/* Gray store marker (zoom ≥ 13, no price reported yet) */
+.store-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #9ca3af;
+  border: 2.5px solid white;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.store-marker:hover {
+  background: #6b7280;
+  transform: scale(1.15);
+}
+
+.store-marker span {
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: -1px;
+}
 
 /* Draggable drop pin (shown while report form is open) */
 .drop-pin {
