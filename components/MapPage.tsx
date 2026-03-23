@@ -327,7 +327,7 @@ export default function MapPage() {
       </header>
 
       {/* ── Legend + log toggle ── */}
-      <div className="absolute top-20 right-4 z-40 bg-white rounded-xl shadow-md px-3 py-2.5 flex flex-col gap-1.5 text-xs font-medium border border-gray-100 min-w-[140px]">
+      <div className="absolute top-20 right-4 z-[1000] bg-white rounded-xl shadow-md px-3 py-2.5 flex flex-col gap-1.5 text-xs font-medium border border-gray-100 min-w-[140px]">
         <div className="flex rounded-lg overflow-hidden border border-gray-200 mb-1">
           <button
             onClick={() => setLogMode(false)}
@@ -368,7 +368,7 @@ export default function MapPage() {
 
       {/* ── Success toast ── */}
       {successMsg && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm px-4 py-2 rounded-full shadow-lg">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-green-600 text-white text-sm px-4 py-2 rounded-full shadow-lg">
           {successMsg}
         </div>
       )}
