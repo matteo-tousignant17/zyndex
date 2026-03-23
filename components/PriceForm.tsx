@@ -2,11 +2,6 @@
 
 import { useState } from 'react';
 
-const FLAVORS = [
-  'Cool Mint', 'Peppermint', 'Spearmint', 'Wintergreen',
-  'Citrus', 'Smooth', 'Coffee', 'Cinnamon', 'Other',
-];
-
 export interface SnappedStore {
   id?: number;       // DB store_id — set when tapping a price pin
   osm_id?: number;   // Overpass OSM ID — set when tapping a gray store marker
@@ -19,8 +14,6 @@ export interface SnappedStore {
 export interface PriceSubmitData {
   store_name: string;
   price: number;
-  strength: number | null;
-  flavor: string;
   lat: number;
   lng: number;
   store_id?: number;
@@ -40,8 +33,6 @@ interface Props {
 export default function PriceForm({ lat, lng, snappedStore, onSubmit, onClose }: Props) {
   const [storeName, setStoreName] = useState('');
   const [priceStr, setPriceStr] = useState('');
-  const [flavor, setFlavor] = useState('Cool Mint');
-  const [strengthStr, setStrengthStr] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -55,13 +46,9 @@ export default function PriceForm({ lat, lng, snappedStore, onSubmit, onClose }:
       return;
     }
 
-    const strength = strengthStr ? parseInt(strengthStr) : null;
-
     const data: PriceSubmitData = {
       store_name: snappedStore ? snappedStore.name : storeName.trim(),
       price,
-      strength,
-      flavor,
       lat: snappedStore ? snappedStore.lat : lat,
       lng: snappedStore ? snappedStore.lng : lng,
     };
@@ -97,7 +84,7 @@ export default function PriceForm({ lat, lng, snappedStore, onSubmit, onClose }:
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* Price — most prominent */}
+          {/* Price */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">
               Price per can <span className="text-red-500">*</span>
@@ -116,34 +103,6 @@ export default function PriceForm({ lat, lng, snappedStore, onSubmit, onClose }:
                 autoFocus
                 className="w-full pl-7 pr-3 py-3 text-xl font-bold border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-            </div>
-          </div>
-
-          {/* Flavor + strength on one row */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Flavor</label>
-              <select
-                value={flavor}
-                onChange={e => setFlavor(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                {FLAVORS.map(f => <option key={f}>{f}</option>)}
-              </select>
-            </div>
-            <div className="w-24">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Strength <span className="text-gray-400 font-normal text-xs">(opt)</span>
-              </label>
-              <select
-                value={strengthStr}
-                onChange={e => setStrengthStr(e.target.value)}
-                className="w-full px-2 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="">—</option>
-                <option value="3">3 mg</option>
-                <option value="6">6 mg</option>
-              </select>
             </div>
           </div>
 
