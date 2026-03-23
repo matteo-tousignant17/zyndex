@@ -122,7 +122,7 @@ export default function MapPage() {
   const [zoom, setZoom]               = useState(5);
   const [logMode, setLogMode]         = useState(false);
   const [showForm, setShowForm]       = useState(false);
-  const [formLatLng, setFormLatLng]   = useState<[number, number] | null>(null);
+  const [formLatLng, setFormLatLng]   = useState<[number, number]>([39.5, -98.35]);
   const [formStore, setFormStore]     = useState<SnappedStore | null>(null);
   const [flyTarget, setFlyTarget]     = useState<[number, number, number] | null>(null);
   const [zipInput, setZipInput]       = useState('');
@@ -396,7 +396,7 @@ export default function MapPage() {
           }} />
 
           {/* Draggable pin shown while freeform form is open */}
-          {showForm && formLatLng && !formStore && (
+          {showForm && !formStore && (
             <Marker
               position={formLatLng}
               draggable
@@ -491,7 +491,7 @@ export default function MapPage() {
       </div>
 
       {/* ── Price submission modal ── */}
-      {showForm && formLatLng && (
+      {showForm && (
         <PriceForm
           lat={formLatLng[0]}
           lng={formLatLng[1]}
