@@ -129,7 +129,7 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
 
           {/* Location hint */}
           <div className="text-xs text-gray-400 -mt-1">
-            📍 Pinned at {lat.toFixed(4)}, {lng.toFixed(4)} — pan the map before opening to adjust.
+            📍 {lat.toFixed(4)}, {lng.toFixed(4)} — drag the pin on the map to adjust location.
           </div>
 
           {error && (

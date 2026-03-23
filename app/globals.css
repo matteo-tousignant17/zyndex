@@ -59,3 +59,24 @@ html, body, #__next {
 .price-pin.pin-green  { background: #16a34a; }
 .price-pin.pin-yellow { background: #d97706; }
 .price-pin.pin-red    { background: #dc2626; }
+
+/* Draggable drop pin (shown while report form is open) */
+.drop-pin {
+  width: 36px;
+  height: 36px;
+  background: #7c3aed;
+  border: 3px solid white;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  transition: transform 0.15s ease;
+}
+
+.drop-pin:active {
+  cursor: grabbing;
+}
+
+.leaflet-dragging .drop-pin {
+  cursor: grabbing;
+}

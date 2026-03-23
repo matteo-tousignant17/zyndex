@@ -45,8 +45,15 @@ function makePriceIcon(displayPrice: number, logMode: boolean) {
   });
 }
 
+const dropPinIcon = L.divIcon({
+  className: '',
+  html: `<div class="drop-pin"></div>`,
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+});
+
 function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr + 'Z').getTime();
+  const diff = Date.now() - new Date(dateStr).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
@@ -61,6 +68,7 @@ function BoundsWatcher({ onChange }: { onChange: (b: L.LatLngBounds) => void }) 
     moveend() { onChange(map.getBounds()); },
     zoomend() { onChange(map.getBounds()); },
   });
+  useEffect(() => { onChange(map.getBounds()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
@@ -91,6 +99,8 @@ export default function MapPage() {
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const mapRef = useRef<L.Map | null>(null);
+  const boundsRef = useRef<L.LatLngBounds | null>(null);
   const fetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPrices = useCallback((bounds: L.LatLngBounds) => {
@@ -104,6 +114,11 @@ export default function MapPage() {
       if (res.ok) setPrices(await res.json());
     }, 300);
   }, []);
+
+  const handleBoundsChange = useCallback((bounds: L.LatLngBounds) => {
+    boundsRef.current = bounds;
+    fetchPrices(bounds);
+  }, [fetchPrices]);
 
   // Try geolocation on first load
   useEffect(() => {
@@ -144,6 +159,13 @@ export default function MapPage() {
     );
   }
 
+  function openForm() {
+    const map = mapRef.current;
+    const center = map ? map.getCenter() : { lat: 39.5, lng: -98.35 };
+    setFormLatLng([center.lat, center.lng]);
+    setShowForm(true);
+  }
+
   async function handleSubmit(data: {
     store_name: string;
     price: number;
@@ -152,29 +174,21 @@ export default function MapPage() {
     lat: number;
     lng: number;
   }) {
-    let geo: { city?: string; state?: string; zip?: string } = {};
-    try {
-      const r = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${data.lat}&lon=${data.lng}&format=json`
-      );
-      const j = await r.json();
-      geo = {
-        city: j.address?.city || j.address?.town || j.address?.village,
-        state: j.address?.state,
-        zip: j.address?.postcode,
-      };
-    } catch { /* best effort */ }
-
     const res = await fetch('/api/prices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, ...geo }),
+      body: JSON.stringify(data),
     });
 
     if (res.ok) {
       setShowForm(false);
       setSuccessMsg('Price reported! Thanks for contributing.');
       setTimeout(() => setSuccessMsg(''), 4000);
+      // Refresh pins in current view
+      if (boundsRef.current) fetchPrices(boundsRef.current);
+    } else {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error ?? 'Submit failed');
     }
   }
 
@@ -222,10 +236,7 @@ export default function MapPage() {
 
         <div className="ml-auto">
           <button
-            onClick={() => {
-              setFormLatLng(flyTarget ? [flyTarget[0], flyTarget[1]] : [39.5, -98.35]);
-              setShowForm(true);
-            }}
+            onClick={openForm}
             className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
             + Report Price
@@ -282,15 +293,31 @@ export default function MapPage() {
           zoom={5}
           className="w-full h-full"
           zoomControl={false}
+          ref={mapRef}
         >
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
 
-          <BoundsWatcher onChange={fetchPrices} />
+          <BoundsWatcher onChange={handleBoundsChange} />
           <FlyTo target={flyTarget} />
           <MapClickHandler onMapClick={(lat, lng) => { setFormLatLng([lat, lng]); setShowForm(true); }} />
+
+          {/* Draggable pin shown while form is open */}
+          {showForm && formLatLng && (
+            <Marker
+              position={formLatLng}
+              draggable
+              icon={dropPinIcon}
+              eventHandlers={{
+                dragend(e) {
+                  const pos = (e.target as L.Marker).getLatLng();
+                  setFormLatLng([pos.lat, pos.lng]);
+                },
+              }}
+            />
+          )}
 
           {prices.map(p => {
             const displayPrice = logMode ? p.price * 5 : p.price;
