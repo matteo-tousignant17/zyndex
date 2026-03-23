@@ -17,23 +17,28 @@ interface PriceEntry {
   city: string | null;
   store_name: string | null;
   price: number;
-  strength: number;
+  strength: number | null;
   flavor: string | null;
   created_at: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function priceClass(price: number) {
-  if (price < 4.75) return 'pin-green';
-  if (price < 5.75) return 'pin-yellow';
+// Thresholds are per-can; multiply by 5 for log mode
+const GREEN_THRESH = 4.75;
+const RED_THRESH   = 5.75;
+
+function priceClass(displayPrice: number, logMode: boolean) {
+  const scale = logMode ? 5 : 1;
+  if (displayPrice < GREEN_THRESH * scale) return 'pin-green';
+  if (displayPrice < RED_THRESH   * scale) return 'pin-yellow';
   return 'pin-red';
 }
 
-function makePriceIcon(price: number) {
+function makePriceIcon(displayPrice: number, logMode: boolean) {
   return L.divIcon({
     className: '',
-    html: `<div class="price-pin ${priceClass(price)}"><span>$${price.toFixed(2)}</span></div>`,
+    html: `<div class="price-pin ${priceClass(displayPrice, logMode)}"><span>$${displayPrice.toFixed(2)}</span></div>`,
     iconSize: [52, 52],
     iconAnchor: [4, 52],
     popupAnchor: [22, -56],
@@ -67,10 +72,18 @@ function FlyTo({ target }: { target: [number, number, number] | null }) {
   return null;
 }
 
+function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    contextmenu(e) { onMapClick(e.latlng.lat, e.latlng.lng); },
+  });
+  return null;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function MapPage() {
   const [prices, setPrices] = useState<PriceEntry[]>([]);
+  const [logMode, setLogMode] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formLatLng, setFormLatLng] = useState<[number, number] | null>(null);
   const [flyTarget, setFlyTarget] = useState<[number, number, number] | null>(null);
@@ -96,10 +109,8 @@ export default function MapPage() {
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setFlyTarget([pos.coords.latitude, pos.coords.longitude, 12]);
-        },
-        () => { /* denied — stay on default view */ },
+        (pos) => setFlyTarget([pos.coords.latitude, pos.coords.longitude, 12]),
+        () => { /* denied — stay on default US view */ },
         { timeout: 5000 }
       );
     }
@@ -108,10 +119,7 @@ export default function MapPage() {
   async function handleZipSearch(e: React.FormEvent) {
     e.preventDefault();
     setLocError('');
-    if (!/^\d{5}$/.test(zipInput)) {
-      setLocError('Enter a 5-digit zip code');
-      return;
-    }
+    if (!/^\d{5}$/.test(zipInput)) { setLocError('Enter a 5-digit zip code'); return; }
     setLocating(true);
     try {
       const res = await fetch(
@@ -131,28 +139,19 @@ export default function MapPage() {
     setLocError('');
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setFlyTarget([pos.coords.latitude, pos.coords.longitude, 13]);
-        setLocating(false);
-      },
+      (pos) => { setFlyTarget([pos.coords.latitude, pos.coords.longitude, 13]); setLocating(false); },
       () => { setLocError('Location access denied'); setLocating(false); }
     );
-  }
-
-  function openForm(lat: number, lng: number) {
-    setFormLatLng([lat, lng]);
-    setShowForm(true);
   }
 
   async function handleSubmit(data: {
     store_name: string;
     price: number;
-    strength: number;
+    strength: number | null;
     flavor: string;
     lat: number;
     lng: number;
   }) {
-    // Reverse-geocode to get city/state/zip
     let geo: { city?: string; state?: string; zip?: string } = {};
     try {
       const r = await fetch(
@@ -176,18 +175,15 @@ export default function MapPage() {
       setShowForm(false);
       setSuccessMsg('Price reported! Thanks for contributing.');
       setTimeout(() => setSuccessMsg(''), 4000);
-      // Refresh prices for current map view — trigger via a small state change
-      // The BoundsWatcher re-fires on next move; for now force a re-fetch
-      const el = document.querySelector('.leaflet-container') as HTMLElement;
-      if (el) el.dispatchEvent(new Event('zyndex-refresh'));
     }
   }
+
+  const scale = logMode ? 5 : 1;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* ── Header ── */}
       <header className="z-50 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
-        {/* Logo */}
         <div className="flex items-center gap-2 mr-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
             <span className="text-white font-black text-sm">Z</span>
@@ -195,18 +191,15 @@ export default function MapPage() {
           <span className="font-black text-gray-900 text-lg tracking-tight">Zyndex</span>
         </div>
 
-        {/* Zip search */}
         <form onSubmit={handleZipSearch} className="flex items-center gap-2 flex-1 max-w-xs">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={zipInput}
-              onChange={e => setZipInput(e.target.value)}
-              placeholder="Enter zip code"
-              maxLength={5}
-              className="w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <input
+            type="text"
+            value={zipInput}
+            onChange={e => setZipInput(e.target.value)}
+            placeholder="Enter zip code"
+            maxLength={5}
+            className="flex-1 pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
           <button
             type="submit"
             disabled={locating}
@@ -225,9 +218,7 @@ export default function MapPage() {
           </button>
         </form>
 
-        {locError && (
-          <span className="text-xs text-red-500">{locError}</span>
-        )}
+        {locError && <span className="text-xs text-red-500">{locError}</span>}
 
         <div className="ml-auto">
           <button
@@ -242,17 +233,38 @@ export default function MapPage() {
         </div>
       </header>
 
-      {/* ── Legend ── */}
-      <div className="absolute top-20 right-4 z-40 bg-white rounded-xl shadow-md px-3 py-2 flex flex-col gap-1.5 text-xs font-medium border border-gray-100">
-        <div className="text-gray-500 font-semibold text-[11px] uppercase tracking-wide mb-0.5">Per Can</div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-green-600 inline-block"></span>Under $4.75
+      {/* ── Legend + log toggle ── */}
+      <div className="absolute top-20 right-4 z-40 bg-white rounded-xl shadow-md px-3 py-2.5 flex flex-col gap-1.5 text-xs font-medium border border-gray-100 min-w-[140px]">
+        {/* Can / Log toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-gray-200 mb-1">
+          <button
+            onClick={() => setLogMode(false)}
+            className={`flex-1 py-1 text-[11px] font-semibold transition-colors ${
+              !logMode ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Per Can
+          </button>
+          <button
+            onClick={() => setLogMode(true)}
+            className={`flex-1 py-1 text-[11px] font-semibold transition-colors ${
+              logMode ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Per Log
+          </button>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-amber-600 inline-block"></span>$4.75 – $5.75
+          <span className="w-3 h-3 rounded-full bg-green-600 inline-block shrink-0"></span>
+          Under ${(GREEN_THRESH * scale).toFixed(2)}
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-red-600 inline-block"></span>Over $5.75
+          <span className="w-3 h-3 rounded-full bg-amber-600 inline-block shrink-0"></span>
+          ${(GREEN_THRESH * scale).toFixed(2)}–${(RED_THRESH * scale).toFixed(2)}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-red-600 inline-block shrink-0"></span>
+          Over ${(RED_THRESH * scale).toFixed(2)}
         </div>
       </div>
 
@@ -278,32 +290,40 @@ export default function MapPage() {
 
           <BoundsWatcher onChange={fetchPrices} />
           <FlyTo target={flyTarget} />
+          <MapClickHandler onMapClick={(lat, lng) => { setFormLatLng([lat, lng]); setShowForm(true); }} />
 
-          {/* Tap-to-report */}
-          <MapClickHandler onMapClick={openForm} />
-
-          {prices.map(p => (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={makePriceIcon(p.price)}>
-              <Popup>
-                <div className="p-3 min-w-[180px]">
-                  <div className="text-2xl font-black text-gray-900">${p.price.toFixed(2)}</div>
-                  <div className="text-sm text-gray-500 mt-0.5">
-                    {p.strength}mg{p.flavor ? ` · ${p.flavor}` : ''}
-                  </div>
-                  {p.store_name && (
-                    <div className="text-sm font-medium text-gray-700 mt-2">{p.store_name}</div>
-                  )}
-                  {(p.city || p.state) && (
-                    <div className="text-xs text-gray-400">
-                      {[p.city, p.state].filter(Boolean).join(', ')}
-                      {p.zip ? ` ${p.zip}` : ''}
+          {prices.map(p => {
+            const displayPrice = logMode ? p.price * 5 : p.price;
+            return (
+              <Marker key={`${p.id}-${logMode}`} position={[p.lat, p.lng]} icon={makePriceIcon(displayPrice, logMode)}>
+                <Popup>
+                  <div className="p-3 min-w-[190px]">
+                    <div className="text-2xl font-black text-gray-900">${displayPrice.toFixed(2)}</div>
+                    <div className="text-xs text-gray-400 -mt-0.5">
+                      {logMode
+                        ? `per log (5 cans) · $${p.price.toFixed(2)} per can`
+                        : `per can · $${(p.price * 5).toFixed(2)} per log`}
                     </div>
-                  )}
-                  <div className="text-xs text-gray-400 mt-2">{timeAgo(p.created_at)}</div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+                    {(p.strength || p.flavor) && (
+                      <div className="text-sm text-gray-500 mt-1.5">
+                        {[p.strength ? `${p.strength}mg` : null, p.flavor].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                    {p.store_name && (
+                      <div className="text-sm font-medium text-gray-700 mt-2">{p.store_name}</div>
+                    )}
+                    {(p.city || p.state) && (
+                      <div className="text-xs text-gray-400">
+                        {[p.city, p.state].filter(Boolean).join(', ')}
+                        {p.zip ? ` ${p.zip}` : ''}
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-400 mt-2">{timeAgo(p.created_at)}</div>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       </div>
 
@@ -318,14 +338,4 @@ export default function MapPage() {
       )}
     </div>
   );
-}
-
-// Separate component so it can use useMapEvents
-function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    contextmenu(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
 }

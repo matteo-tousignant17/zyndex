@@ -13,7 +13,7 @@ interface Props {
   onSubmit: (data: {
     store_name: string;
     price: number;
-    strength: number;
+    strength: number | null;
     flavor: string;
     lat: number;
     lng: number;
@@ -24,8 +24,8 @@ interface Props {
 export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
   const [storeName, setStoreName] = useState('');
   const [priceStr, setPriceStr] = useState('');
-  const [strength, setStrength] = useState<3 | 6>(6);
   const [flavor, setFlavor] = useState('Cool Mint');
+  const [strengthStr, setStrengthStr] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -38,6 +38,8 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
       setError('Enter a price between $1.00 and $30.00');
       return;
     }
+
+    const strength = strengthStr ? parseInt(strengthStr) : null;
 
     setSubmitting(true);
     try {
@@ -58,12 +60,7 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
       <div className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900">Report a Price</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-          >
-            ×
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -88,37 +85,32 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
             </div>
           </div>
 
-          {/* Strength */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Nicotine strength</label>
-            <div className="flex gap-2">
-              {([3, 6] as const).map(s => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStrength(s)}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-colors ${
-                    strength === s
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  {s} mg
-                </button>
-              ))}
+          {/* Flavor + strength on one row */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Flavor</label>
+              <select
+                value={flavor}
+                onChange={e => setFlavor(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {FLAVORS.map(f => <option key={f}>{f}</option>)}
+              </select>
             </div>
-          </div>
-
-          {/* Flavor */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Flavor</label>
-            <select
-              value={flavor}
-              onChange={e => setFlavor(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              {FLAVORS.map(f => <option key={f}>{f}</option>)}
-            </select>
+            <div className="w-24">
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Strength <span className="text-gray-400 font-normal text-xs">(opt)</span>
+              </label>
+              <select
+                value={strengthStr}
+                onChange={e => setStrengthStr(e.target.value)}
+                className="w-full px-2 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">—</option>
+                <option value="3">3 mg</option>
+                <option value="6">6 mg</option>
+              </select>
+            </div>
           </div>
 
           {/* Store name */}
@@ -137,7 +129,7 @@ export default function PriceForm({ lat, lng, onSubmit, onClose }: Props) {
 
           {/* Location hint */}
           <div className="text-xs text-gray-400 -mt-1">
-            📍 Pinned at {lat.toFixed(4)}, {lng.toFixed(4)} — move the map before opening to change location.
+            📍 Pinned at {lat.toFixed(4)}, {lng.toFixed(4)} — pan the map before opening to adjust.
           </div>
 
           {error && (
