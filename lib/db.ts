@@ -7,11 +7,9 @@ let _init: Promise<void> | null = null;
 
 function getSql(): Sql {
   if (!_sql) {
-    const url = process.env.DATABASE_URL;
+    const url = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL;
     if (!url) {
-      throw new Error(
-        'DATABASE_URL is not set. Copy .env.example → .env.local and add your Supabase connection string.'
-      );
+      throw new Error('DATABASE_URL or POSTGRES_PRISMA_URL is not set.');
     }
     const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
     _sql = postgres(url, {
