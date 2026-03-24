@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/db';
 
 // Max bounding box size in degrees (~33km). Overpass gets slow on large areas.
 const MAX_SPAN = 0.3;
@@ -92,6 +93,30 @@ export async function GET(request: NextRequest) {
           category: osmCategory(tags),
         };
       });
+
+    // Passively persist store locations to DB as users browse.
+    // report_count stays 0 (no price yet) — just cataloging real locations.
+    // Best-effort: don't fail the response if DB is unavailable.
+    if (stores.length > 0) {
+      try {
+        const db = await getDb();
+        const rows = stores.map((s: { osm_id: number; name: string; lat: number; lng: number; category: string | null; brand: string | null }) => ({
+          osm_id:   s.osm_id,
+          name:     s.name,
+          lat:      s.lat,
+          lng:      s.lng,
+          category: s.category,
+          brand:    s.brand,
+        }));
+        await db`
+          INSERT INTO stores (osm_id, name, lat, lng, category, brand)
+          ${db(rows, 'osm_id', 'name', 'lat', 'lng', 'category', 'brand')}
+          ON CONFLICT (osm_id) DO NOTHING
+        `;
+      } catch {
+        // Non-critical — store catalog build-up is best-effort
+      }
+    }
 
     return NextResponse.json(stores);
   } catch {

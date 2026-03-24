@@ -44,10 +44,11 @@ function priceClass(displayPrice: number, greenThresh: number, redThresh: number
   return 'pin-red';
 }
 
-function makePriceIcon(displayPrice: number, greenThresh: number, redThresh: number, isStale: boolean, isFreeform: boolean) {
+function makePriceIcon(displayPrice: number, greenThresh: number, redThresh: number, isStale: boolean, isFreeform: boolean, isEstimate: boolean) {
+  const label = isEstimate ? `~$${displayPrice.toFixed(2)}` : `$${displayPrice.toFixed(2)}`;
   return L.divIcon({
     className: '',
-    html: `<div class="price-pin ${priceClass(displayPrice, greenThresh, redThresh)}${isStale ? ' pin-stale' : ''}${isFreeform ? ' pin-freeform' : ''}"><span>$${displayPrice.toFixed(2)}</span></div>`,
+    html: `<div class="price-pin ${priceClass(displayPrice, greenThresh, redThresh)}${isStale ? ' pin-stale' : ''}${isFreeform ? ' pin-freeform' : ''}${isEstimate ? ' pin-estimate' : ''}"><span>${label}</span></div>`,
     iconSize: [52, 52],
     iconAnchor: [4, 52],
     popupAnchor: [22, -56],
@@ -78,7 +79,8 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function confidenceBadge(confidence: number, isStale: boolean) {
+function confidenceBadge(confidence: number, isStale: boolean, reportCount: number) {
+  if (reportCount === 0) return <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Estimate</span>;
   if (isStale) return <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">Stale</span>;
   if (confidence >= 0.7) return null;
   if (confidence >= 0.4) return <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Aging</span>;
@@ -393,6 +395,10 @@ export default function MapPage() {
           </div>
         )}
         <div className="flex items-center gap-2 pt-1 mt-0.5 border-t border-gray-100">
+          <span className="w-3 h-3 rounded-full border-2 border-dashed border-gray-400 inline-block shrink-0 opacity-65"></span>
+          Estimated
+        </div>
+        <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full border-2 border-dashed border-gray-400 inline-block shrink-0"></span>
           Unverified
         </div>
@@ -475,17 +481,20 @@ export default function MapPage() {
           {prices.map(p => {
             const displayPrice = logMode ? p.price * 5 : p.price;
             const isFreeform = p.osm_id === null;
+            const isEstimate = p.report_count === 0;
             return (
               <Marker
                 key={`${p.id}-${logMode}-${greenThresh.toFixed(2)}`}
                 position={[p.lat, p.lng]}
-                icon={makePriceIcon(displayPrice, greenThresh, redThresh, p.is_stale, isFreeform)}
+                icon={makePriceIcon(displayPrice, greenThresh, redThresh, p.is_stale, isFreeform, isEstimate)}
               >
                 <Popup>
                   <div className="p-3 min-w-[200px]">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-2xl font-black text-gray-900">${displayPrice.toFixed(2)}</div>
+                        <div className="text-2xl font-black text-gray-900">
+                          {isEstimate ? '~' : ''}${displayPrice.toFixed(2)}
+                        </div>
                         <div className="text-xs text-gray-400 -mt-0.5">
                           {logMode
                             ? `per log (5 cans) · $${p.price.toFixed(2)} per can`
@@ -493,8 +502,8 @@ export default function MapPage() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        {confidenceBadge(p.confidence, p.is_stale)}
-                        {isFreeform && (
+                        {confidenceBadge(p.confidence, p.is_stale, p.report_count)}
+                        {isFreeform && !isEstimate && (
                           <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Unverified</span>
                         )}
                       </div>
@@ -516,9 +525,11 @@ export default function MapPage() {
                     )}
 
                     <div className="text-xs text-gray-400 mt-1.5">
-                      {p.report_count > 1
-                        ? `${p.report_count} reports · last updated ${timeAgo(p.created_at)}`
-                        : `Reported ${timeAgo(p.created_at)}`}
+                      {isEstimate
+                        ? 'Estimated from regional data — confirm if accurate'
+                        : p.report_count > 1
+                          ? `${p.report_count} reports · last updated ${timeAgo(p.created_at)}`
+                          : `Reported ${timeAgo(p.created_at)}`}
                     </div>
 
                     <div className="flex gap-2 mt-3">

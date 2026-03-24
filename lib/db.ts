@@ -91,7 +91,7 @@ async function initSchema(sql: Sql) {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_sp_store_id ON store_prices (store_id)`;
 
-  const [{ n }] = await sql<[{ n: string }]>`SELECT COUNT(*) AS n FROM prices`;
+  const [{ n }] = await sql<[{ n: string }]>`SELECT COUNT(*) AS n FROM store_prices`;
   if (Number(n) === 0) await seedData(sql);
 }
 
@@ -143,6 +143,9 @@ const SEED: SeedRow[] = [
 ];
 
 async function seedData(sql: Sql) {
+  // Seed stores + estimated prices only — no entries in `prices` table.
+  // report_count=0 means "estimate, no real user has confirmed this yet".
+  // When a user reports a real price, the upsert in /api/prices replaces it.
   for (const r of SEED) {
     const [store] = await sql<[{ id: number }]>`
       INSERT INTO stores (name, lat, lng, category, brand, city, state, zip)
@@ -150,12 +153,8 @@ async function seedData(sql: Sql) {
       RETURNING id
     `;
     await sql`
-      INSERT INTO prices (lat, lng, zip, state, city, store_name, price, strength, flavor, store_id)
-      VALUES (${r.lat}, ${r.lng}, ${r.zip}, ${r.state}, ${r.city}, ${r.store_name}, ${r.price}, ${r.strength}, ${r.flavor}, ${store.id})
-    `;
-    await sql`
       INSERT INTO store_prices (store_id, current_price, strength, flavor, report_count, last_reported_at, confidence, is_stale)
-      VALUES (${store.id}, ${r.price}, ${r.strength}, ${r.flavor}, 1, NOW(), 0.8, FALSE)
+      VALUES (${store.id}, ${r.price}, ${r.strength}, ${r.flavor}, 0, NOW(), 0.25, FALSE)
       ON CONFLICT (store_id) DO NOTHING
     `;
   }
