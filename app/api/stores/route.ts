@@ -5,16 +5,26 @@ const MAX_SPAN = 0.3;
 
 // OSM tags that indicate stores likely to carry nicotine pouches
 const OVERPASS_QUERY = (s: number, w: number, n: number, e: number) => `
-[out:json][timeout:10];
+[out:json][timeout:15];
 (
   node["amenity"="fuel"](${s},${w},${n},${e});
   node["shop"="convenience"](${s},${w},${n},${e});
   node["shop"="tobacco"](${s},${w},${n},${e});
+  node["shop"="vape"](${s},${w},${n},${e});
   node["amenity"="pharmacy"](${s},${w},${n},${e});
+  node["shop"="chemist"](${s},${w},${n},${e});
+  node["shop"="supermarket"](${s},${w},${n},${e});
+  node["shop"="grocery"](${s},${w},${n},${e});
+  node["shop"="liquor"](${s},${w},${n},${e});
   way["amenity"="fuel"](${s},${w},${n},${e});
   way["shop"="convenience"](${s},${w},${n},${e});
   way["shop"="tobacco"](${s},${w},${n},${e});
+  way["shop"="vape"](${s},${w},${n},${e});
   way["amenity"="pharmacy"](${s},${w},${n},${e});
+  way["shop"="chemist"](${s},${w},${n},${e});
+  way["shop"="supermarket"](${s},${w},${n},${e});
+  way["shop"="grocery"](${s},${w},${n},${e});
+  way["shop"="liquor"](${s},${w},${n},${e});
 );
 out center;
 `;
@@ -23,7 +33,10 @@ function osmCategory(tags: Record<string, string>): string {
   if (tags.amenity === 'fuel') return 'fuel';
   if (tags.shop === 'convenience') return 'convenience';
   if (tags.shop === 'tobacco') return 'tobacco';
+  if (tags.shop === 'vape') return 'vape';
   if (tags.amenity === 'pharmacy' || tags.shop === 'chemist') return 'pharmacy';
+  if (tags.shop === 'supermarket' || tags.shop === 'grocery') return 'grocery';
+  if (tags.shop === 'liquor') return 'liquor';
   return 'other';
 }
 
@@ -79,8 +92,8 @@ export async function GET(request: NextRequest) {
           category: osmCategory(tags),
         };
       })
-      // Skip unnamed placeholder nodes
-      .filter((s: { name: string }) => s.name !== 'Store' || true);
+      // Skip unnamed placeholder nodes (fallback name means OSM has no name tag)
+      .filter((s: { name: string }) => s.name !== 'Store');
 
     return NextResponse.json(stores);
   } catch {
