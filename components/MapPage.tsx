@@ -286,27 +286,28 @@ export default function MapPage() {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* ── Header ── */}
-      <header className="z-50 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center gap-2 mr-2 shrink-0">
+      <header className="z-50 flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-200 shadow-sm">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
             <span className="text-white font-black text-sm">Z</span>
           </div>
-          <span className="font-black text-gray-900 text-lg tracking-tight">Zyndex</span>
+          <span className="font-black text-gray-900 text-lg tracking-tight hidden sm:inline">Zyndex</span>
         </div>
 
-        <form onSubmit={handleZipSearch} className="flex items-center gap-2 flex-1 max-w-xs">
+        <form onSubmit={handleZipSearch} className="flex items-center gap-1.5 flex-1">
           <input
             type="text"
+            inputMode="numeric"
             value={zipInput}
             onChange={e => setZipInput(e.target.value)}
-            placeholder="Enter zip code"
+            placeholder="Zip code"
             maxLength={5}
-            className="flex-1 pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 min-w-0 pl-3 pr-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="submit"
             disabled={locating}
-            className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shrink-0"
           >
             Go
           </button>
@@ -315,22 +316,20 @@ export default function MapPage() {
             onClick={handleLocateMe}
             disabled={locating}
             title="Use my location"
-            className="px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 shrink-0"
           >
             {locating ? '…' : '📍'}
           </button>
         </form>
 
-        {locError && <span className="text-xs text-red-500">{locError}</span>}
+        {locError && <span className="text-xs text-red-500 shrink-0">{locError}</span>}
 
-        <div className="ml-auto">
-          <button
-            onClick={openFreeformForm}
-            className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            + Report Price
-          </button>
-        </div>
+        <button
+          onClick={openFreeformForm}
+          className="hidden sm:block ml-auto shrink-0 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
+          + Report Price
+        </button>
       </header>
 
       {/* ── Legend + log toggle ── */}
@@ -379,6 +378,15 @@ export default function MapPage() {
           {successMsg}
         </div>
       )}
+
+      {/* ── Mobile FAB ── */}
+      <button
+        onClick={openFreeformForm}
+        className="sm:hidden fixed bottom-6 right-4 z-[1000] w-14 h-14 bg-green-600 text-white text-2xl font-bold rounded-full shadow-lg flex items-center justify-center hover:bg-green-700 active:scale-95 transition-transform"
+        aria-label="Report a price"
+      >
+        +
+      </button>
 
       {/* ── Map ── */}
       <div className="flex-1 relative">
