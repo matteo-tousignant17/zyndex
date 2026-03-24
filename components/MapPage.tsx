@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 're
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import PriceForm, { SnappedStore, PriceSubmitData } from './PriceForm';
+import AboutModal from './AboutModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,7 @@ export default function MapPage() {
   const [locating, setLocating]       = useState(false);
   const [locError, setLocError]       = useState('');
   const [successMsg, setSuccessMsg]   = useState('');
+  const [showAbout, setShowAbout]     = useState(false);
   const mapRef       = useRef<L.Map | null>(null);
   const boundsRef    = useRef<L.LatLngBounds | null>(null);
   const fetchTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -287,12 +289,16 @@ export default function MapPage() {
     <div className="flex flex-col h-screen bg-gray-50">
       {/* ── Header ── */}
       <header className="z-50 flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={() => setShowAbout(true)}
+          className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity"
+          aria-label="About Zyndex"
+        >
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
             <span className="text-white font-black text-sm">Z</span>
           </div>
           <span className="font-black text-gray-900 text-lg tracking-tight hidden sm:inline">Zyndex</span>
-        </div>
+        </button>
 
         <form onSubmit={handleZipSearch} className="flex items-center gap-1.5 flex-1">
           <input
@@ -514,6 +520,9 @@ export default function MapPage() {
           })}
         </MapContainer>
       </div>
+
+      {/* ── About modal ── */}
+      {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
 
       {/* ── Price submission modal ── */}
       {showForm && (
