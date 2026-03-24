@@ -14,8 +14,14 @@ export async function GET(request: NextRequest) {
   const neLat = parseFloat(searchParams.get('neLat') ?? '');
   const neLng = parseFloat(searchParams.get('neLng') ?? '');
 
-  if ([swLat, swLng, neLat, neLng].some(isNaN)) {
+  if ([swLat, swLng, neLat, neLng].some(v => !isFinite(v))) {
     return NextResponse.json({ error: 'swLat, swLng, neLat, neLng required' }, { status: 400 });
+  }
+  if (swLat > neLat || swLng > neLng) {
+    return NextResponse.json({ error: 'Invalid bounding box' }, { status: 400 });
+  }
+  if (swLat < -90 || neLat > 90 || swLng < -180 || neLng > 180) {
+    return NextResponse.json({ error: 'Coordinates out of range' }, { status: 400 });
   }
 
   const sql = await getDb();
@@ -86,7 +92,7 @@ export async function POST(request: NextRequest) {
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     return NextResponse.json({ error: 'Invalid coordinates' }, { status: 400 });
   }
-  if (typeof price !== 'number' || price < 1 || price > 30) {
+  if (typeof price !== 'number' || !isFinite(price) || price < 1 || price > 30) {
     return NextResponse.json({ error: 'Price must be between $1 and $30' }, { status: 400 });
   }
   if (strength !== null && strength !== undefined && strength !== 3 && strength !== 6) {
@@ -118,10 +124,10 @@ export async function POST(request: NextRequest) {
         INSERT INTO stores (osm_id, name, lat, lng, category, brand, city, state, zip)
         VALUES (
           ${osm_id},
-          ${typeof osm_name === 'string' ? osm_name.trim() : 'Store'},
+          ${typeof osm_name === 'string' ? osm_name.trim().slice(0, 200) : 'Store'},
           ${lat}, ${lng},
-          ${typeof osm_category === 'string' ? osm_category : null},
-          ${typeof osm_name === 'string' ? osm_name.trim() : null},
+          ${typeof osm_category === 'string' ? osm_category.trim().slice(0, 100) : null},
+          ${typeof osm_name === 'string' ? osm_name.trim().slice(0, 200) : null},
           ${geo.city}, ${geo.state}, ${geo.zip}
         )
         ON CONFLICT (osm_id) DO UPDATE SET name = EXCLUDED.name
@@ -132,7 +138,7 @@ export async function POST(request: NextRequest) {
   } else {
     // Freeform: create a new store without an OSM ID
     const geo = await reverseGeocode(lat as number, lng as number);
-    const name = typeof store_name === 'string' ? store_name.trim() || 'Unknown' : 'Unknown';
+    const name = typeof store_name === 'string' ? (store_name.trim().slice(0, 200) || 'Unknown') : 'Unknown';
     const [created] = await sql<[{ id: number }]>`
       INSERT INTO stores (name, lat, lng, city, state, zip)
       VALUES (${name}, ${lat}, ${lng}, ${geo.city}, ${geo.state}, ${geo.zip})
@@ -220,7 +226,10 @@ async function reverseGeocode(lat: number, lng: number) {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { 'User-Agent': 'Zyndex/1.0 (nicotine-price-index)' } }
+      {
+        headers: { 'User-Agent': 'Zyndex/1.0 (nicotine-price-index)' },
+        signal: AbortSignal.timeout(5000),
+      }
     );
     if (res.ok) {
       const j = await res.json();
