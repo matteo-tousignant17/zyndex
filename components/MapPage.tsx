@@ -273,8 +273,15 @@ export default function MapPage() {
 
   // OSM IDs of stores that already have price data (to avoid duplicate markers)
   const pricedOsmIds = new Set(prices.map(p => p.osm_id).filter(Boolean));
-  // Filter out Overpass stores that already have a price pin on the map
-  const unpricedStores = stores.filter(s => !pricedOsmIds.has(s.osm_id));
+  // Filter out Overpass stores that already have a price pin on the map —
+  // either by osm_id match or by proximity (~50 m) for freeform pins with no osm_id
+  const unpricedStores = stores.filter(s => {
+    if (pricedOsmIds.has(s.osm_id)) return false;
+    const nearby = prices.some(
+      p => Math.abs(p.lat - s.lat) < 0.0005 && Math.abs(p.lng - s.lng) < 0.0005
+    );
+    return !nearby;
+  });
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
