@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   // Refuse to query huge areas — caller should only call at zoom ≥ 13
   if ((neLat - swLat) > MAX_SPAN || (neLng - swLng) > MAX_SPAN) {
-    return NextResponse.json([]);
+    return NextResponse.json({ error: 'Area too large' }, { status: 400 });
   }
 
   const query = OVERPASS_QUERY(swLat, swLng, neLat, neLng);
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       next: { revalidate: 3600 },
     } as RequestInit);
 
-    if (!res.ok) return NextResponse.json([]);
+    if (!res.ok) return NextResponse.json({ error: 'Overpass error' }, { status: 502 });
 
     const json = await res.json();
 
@@ -84,6 +84,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(stores);
   } catch {
-    return NextResponse.json([]);
+    return NextResponse.json({ error: 'Fetch failed' }, { status: 502 });
   }
 }
