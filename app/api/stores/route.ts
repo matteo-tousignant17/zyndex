@@ -91,9 +91,7 @@ export async function GET(request: NextRequest) {
           brand:    tags.brand ?? null,
           category: osmCategory(tags),
         };
-      })
-      // Skip unnamed placeholder nodes (fallback name means OSM has no name tag)
-      .filter((s: { name: string }) => s.name !== 'Store');
+      });
 
     return NextResponse.json(stores);
   } catch {
