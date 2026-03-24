@@ -127,6 +127,7 @@ export default function MapPage() {
   const [locError, setLocError]       = useState('');
   const [successMsg, setSuccessMsg]   = useState('');
   const [showAbout, setShowAbout]     = useState(false);
+  const [loadingStores, setLoadingStores] = useState(false);
   const mapRef       = useRef<L.Map | null>(null);
   const boundsRef    = useRef<L.LatLngBounds | null>(null);
   const fetchTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -146,13 +147,18 @@ export default function MapPage() {
 
   const fetchStores = useCallback((bounds: L.LatLngBounds) => {
     if (storeTimer.current) clearTimeout(storeTimer.current);
+    setLoadingStores(true);
     storeTimer.current = setTimeout(async () => {
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
-      const res = await fetch(
-        `/api/stores?swLat=${sw.lat}&swLng=${sw.lng}&neLat=${ne.lat}&neLng=${ne.lng}`
-      );
-      if (res.ok) setStores(await res.json());
+      try {
+        const res = await fetch(
+          `/api/stores?swLat=${sw.lat}&swLng=${sw.lng}&neLat=${ne.lat}&neLng=${ne.lng}`
+        );
+        if (res.ok) setStores(await res.json());
+      } finally {
+        setLoadingStores(false);
+      }
     }, 500);
   }, []);
 
@@ -161,7 +167,7 @@ export default function MapPage() {
     setZoom(newZoom);
     fetchPrices(bounds);
     if (newZoom >= 13) fetchStores(bounds);
-    else if (newZoom < 12) setStores([]);
+    else if (newZoom < 12) { setStores([]); setLoadingStores(false); }
   }, [fetchPrices, fetchStores]);
 
   // Try geolocation on first load
@@ -391,6 +397,14 @@ export default function MapPage() {
           Unverified
         </div>
       </div>
+
+      {/* ── Stores loading indicator ── */}
+      {loadingStores && zoom >= 13 && (
+        <div className="absolute bottom-8 left-4 z-[1000] flex items-center gap-1.5 bg-white/80 backdrop-blur-sm text-gray-500 text-xs px-2.5 py-1.5 rounded-full shadow-sm border border-gray-200 pointer-events-none">
+          <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
+          Loading stores…
+        </div>
+      )}
 
       {/* ── Success toast ── */}
       {successMsg && (
