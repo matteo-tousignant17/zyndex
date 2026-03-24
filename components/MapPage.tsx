@@ -161,7 +161,7 @@ export default function MapPage() {
     setZoom(newZoom);
     fetchPrices(bounds);
     if (newZoom >= 13) fetchStores(bounds);
-    else setStores([]);
+    else if (newZoom < 12) setStores([]);
   }, [fetchPrices, fetchStores]);
 
   // Try geolocation on first load
