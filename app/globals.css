@@ -60,6 +60,7 @@ html, body, #__next {
 .price-pin.pin-yellow { background: #d97706; }
 .price-pin.pin-red    { background: #dc2626; }
 .price-pin.pin-stale  { opacity: 0.45; }
+.price-pin.pin-freeform { border: 2.5px dashed white; opacity: 0.8; }
 
 /* Gray store marker (zoom ≥ 13, no price reported yet) */
 .store-marker {

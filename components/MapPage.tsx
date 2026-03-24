@@ -47,10 +47,10 @@ function priceClass(displayPrice: number, logMode: boolean) {
   return 'pin-red';
 }
 
-function makePriceIcon(displayPrice: number, logMode: boolean, isStale: boolean) {
+function makePriceIcon(displayPrice: number, logMode: boolean, isStale: boolean, isFreeform: boolean) {
   return L.divIcon({
     className: '',
-    html: `<div class="price-pin ${priceClass(displayPrice, logMode)}${isStale ? ' pin-stale' : ''}"><span>$${displayPrice.toFixed(2)}</span></div>`,
+    html: `<div class="price-pin ${priceClass(displayPrice, logMode)}${isStale ? ' pin-stale' : ''}${isFreeform ? ' pin-freeform' : ''}"><span>$${displayPrice.toFixed(2)}</span></div>`,
     iconSize: [52, 52],
     iconAnchor: [4, 52],
     popupAnchor: [22, -56],
@@ -370,6 +370,10 @@ export default function MapPage() {
             No data yet
           </div>
         )}
+        <div className="flex items-center gap-2 pt-1 mt-0.5 border-t border-gray-100">
+          <span className="w-3 h-3 rounded-full border-2 border-dashed border-gray-400 inline-block shrink-0"></span>
+          Unverified
+        </div>
       </div>
 
       {/* ── Success toast ── */}
@@ -440,11 +444,12 @@ export default function MapPage() {
           {/* Colored price pins — one per store */}
           {prices.map(p => {
             const displayPrice = logMode ? p.price * 5 : p.price;
+            const isFreeform = p.osm_id === null;
             return (
               <Marker
                 key={`${p.id}-${logMode}`}
                 position={[p.lat, p.lng]}
-                icon={makePriceIcon(displayPrice, logMode, p.is_stale)}
+                icon={makePriceIcon(displayPrice, logMode, p.is_stale, isFreeform)}
               >
                 <Popup>
                   <div className="p-3 min-w-[200px]">
@@ -457,7 +462,12 @@ export default function MapPage() {
                             : `per can · $${(p.price * 5).toFixed(2)} per log`}
                         </div>
                       </div>
-                      {confidenceBadge(p.confidence, p.is_stale)}
+                      <div className="flex flex-col items-end gap-1">
+                        {confidenceBadge(p.confidence, p.is_stale)}
+                        {isFreeform && (
+                          <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Unverified</span>
+                        )}
+                      </div>
                     </div>
 
                     {(p.strength || p.flavor) && (
