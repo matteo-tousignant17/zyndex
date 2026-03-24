@@ -38,20 +38,16 @@ interface StoreEntry {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const GREEN_THRESH = 4.75;
-const RED_THRESH   = 5.75;
-
-function priceClass(displayPrice: number, logMode: boolean) {
-  const scale = logMode ? 5 : 1;
-  if (displayPrice < GREEN_THRESH * scale) return 'pin-green';
-  if (displayPrice < RED_THRESH   * scale) return 'pin-yellow';
+function priceClass(displayPrice: number, greenThresh: number, redThresh: number) {
+  if (displayPrice < greenThresh) return 'pin-green';
+  if (displayPrice < redThresh)   return 'pin-yellow';
   return 'pin-red';
 }
 
-function makePriceIcon(displayPrice: number, logMode: boolean, isStale: boolean, isFreeform: boolean) {
+function makePriceIcon(displayPrice: number, greenThresh: number, redThresh: number, isStale: boolean, isFreeform: boolean) {
   return L.divIcon({
     className: '',
-    html: `<div class="price-pin ${priceClass(displayPrice, logMode)}${isStale ? ' pin-stale' : ''}${isFreeform ? ' pin-freeform' : ''}"><span>$${displayPrice.toFixed(2)}</span></div>`,
+    html: `<div class="price-pin ${priceClass(displayPrice, greenThresh, redThresh)}${isStale ? ' pin-stale' : ''}${isFreeform ? ' pin-freeform' : ''}"><span>$${displayPrice.toFixed(2)}</span></div>`,
     iconSize: [52, 52],
     iconAnchor: [4, 52],
     popupAnchor: [22, -56],
@@ -273,6 +269,15 @@ export default function MapPage() {
 
   const scale = logMode ? 5 : 1;
 
+  // Dynamic thresholds based on visible prices — split min/max into thirds.
+  // Falls back to sensible defaults when fewer than 2 distinct prices are visible.
+  const visibleDisplayPrices = prices.map(p => p.price * scale);
+  const dynMin = visibleDisplayPrices.length > 0 ? Math.min(...visibleDisplayPrices) : 4.75 * scale;
+  const dynMax = visibleDisplayPrices.length > 0 ? Math.max(...visibleDisplayPrices) : 5.75 * scale;
+  const range = dynMax - dynMin;
+  const greenThresh = range > 0.01 ? dynMin + range / 3 : dynMin * 1.05;
+  const redThresh   = range > 0.01 ? dynMin + (range * 2) / 3 : dynMin * 1.10;
+
   // OSM IDs of stores that already have price data (to avoid duplicate markers)
   const pricedOsmIds = new Set(prices.map(p => p.osm_id).filter(Boolean));
   // Filter out Overpass stores that already have a price pin on the map —
@@ -358,17 +363,22 @@ export default function MapPage() {
             Per Log
           </button>
         </div>
+        {prices.length > 0 && (
+          <div className="text-[10px] text-gray-400 font-normal -mb-0.5">
+            {prices.length} spot{prices.length !== 1 ? 's' : ''} in view
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-green-600 inline-block shrink-0"></span>
-          Under ${(GREEN_THRESH * scale).toFixed(2)}
+          Under ${greenThresh.toFixed(2)}
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-amber-600 inline-block shrink-0"></span>
-          ${(GREEN_THRESH * scale).toFixed(2)}–${(RED_THRESH * scale).toFixed(2)}
+          ${greenThresh.toFixed(2)}–${redThresh.toFixed(2)}
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-red-600 inline-block shrink-0"></span>
-          Over ${(RED_THRESH * scale).toFixed(2)}
+          Over ${redThresh.toFixed(2)}
         </div>
         {zoom >= 13 && (
           <div className="flex items-center gap-2 pt-1 mt-0.5 border-t border-gray-100">
@@ -453,9 +463,9 @@ export default function MapPage() {
             const isFreeform = p.osm_id === null;
             return (
               <Marker
-                key={`${p.id}-${logMode}`}
+                key={`${p.id}-${logMode}-${greenThresh.toFixed(2)}`}
                 position={[p.lat, p.lng]}
-                icon={makePriceIcon(displayPrice, logMode, p.is_stale, isFreeform)}
+                icon={makePriceIcon(displayPrice, greenThresh, redThresh, p.is_stale, isFreeform)}
               >
                 <Popup>
                   <div className="p-3 min-w-[200px]">
